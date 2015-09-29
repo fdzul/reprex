@@ -8,18 +8,25 @@
 #' display in RStudio's Viewer pane, if available, or in the default browser
 #' otherwise.
 #'
-#' @param x A code expression. If not given, retrieves code from the clipboard.
-#' @param infile Path to \code{.R} file containing reprex code
-#' @param venue "gh" for GitHub or "so" for stackoverflow
+#' @param x An expression. If not given, \code{repex} will look for code in
+#'   \code{infile}, if provided, or on the clipboard.
+#' @param infile Path to \code{.R} file containing reprex code.
+#' @param venue "gh" for GitHub or "so" for stackoverflow.
 #' @param outfile Desired stub for output \code{.R}, \code{.md}, and
 #'   \code{.html} files for reproducible example. If \code{NULL}, keeps them in
 #'   temporary files. At this point, outfiles are deposited in current working
-#'   directory, but the goal is to consult options for a place where you keep
-#'   all such snippets.
-#' @param show Whether to show the output in a viewer (RStudio or browser)
+#'   directory, but the goal is to consult options for a place to store all
+#'   reprexes.
+#' @param show Whether to show rendered output in a viewer (RStudio or browser).
 #' @param si Whether to include the results of
 #'   \code{\link[devtools]{session_info}}, if available, or
 #'   \code{\link{sessionInfo}} at the end of the reprex.
+#' @param sandbox Requests that the reprex be run in a clean R session, which
+#'   will verify that it is, indeed, a reprex. Defaults to \code{TRUE} whenever
+#'   \code{devtools} is installed. When \code{FALSE}, \code{reprex} attempts to
+#'   execute in a clean environment, but there are various ways for previous
+#'   actions in the user's current session to affect reprex execution, such as
+#'   the availability of loaded packages.
 #' @param upload.fun Function that is valid for the \code{upload.fun}
 #'   \href{http://yihui.name/knitr/options/}{\code{knitr} option}, for uploading
 #'   and linking images stored on the web. Defaults to
@@ -45,7 +52,7 @@
 #'
 #' @export
 reprex <- function(x, infile = NULL, venue = c("gh", "so"), outfile = NULL,
-                   show = TRUE, si = FALSE,
+                   show = TRUE, si = FALSE, sandbox = NULL,
                    upload.fun = knitr::imgur_upload) {
 
   venue <- match.arg(venue)
@@ -66,6 +73,12 @@ reprex <- function(x, infile = NULL, venue = c("gh", "so"), outfile = NULL,
     the_source <- format_deparsed(deparsed)
   }
 
+  if (is.null(sandbox) || sandbox) {
+    sandbox <- requireNamespace("devtools", quietly = TRUE)
+  } else {
+    sandbox <- FALSE
+  }
+
   the_source <- ensure_not_empty(the_source)
   the_source <- ensure_not_dogfood(the_source)
   the_source <- add_header(the_source)
@@ -78,10 +91,13 @@ reprex <- function(x, infile = NULL, venue = c("gh", "so"), outfile = NULL,
 
   writeLines(the_source, r_file)
 
-  reprex_(r_file, venue, show, upload.fun)
+  r_file <- normalizePath(r_file)
+
+  reprex_(r_file, venue, show, sandbox, upload.fun)
 }
 
 reprex_ <- function(r_file, venue = c("gh", "so"), show = TRUE,
+                    sandbox = TRUE,
                     upload.fun = knitr::imgur_upload) {
 
   venue <- match.arg(venue)
@@ -95,13 +111,36 @@ reprex_ <- function(r_file, venue = c("gh", "so"), show = TRUE,
       gh = rmarkdown::md_document(variant = "markdown_github"),
       so = rmarkdown::md_document()
     ),
-    envir = new.env(parent = as.environment(2)),
+    envir = switch(
+      sandbox,
+      `TRUE` = NULL,
+      `FALSE` = new.env(parent = as.environment(2))
+    ),
     quiet = TRUE)
 
-  rendout <-
-    suppressMessages(try(do.call(rmarkdown::render, rendargs), silent = TRUE))
+  if (sandbox) {
+    wrapper_file <- gsub("\\.R$", "-wrapper.R", r_file)
+    text <- deparse(as.call(c(quote(rmarkdown::render), rendargs)))
+    writeLines(text, wrapper_file)
+    rendout <-
+      suppressMessages(
+        try(
+          devtools::clean_source(wrapper_file, quiet = TRUE),
+          silent = TRUE
+        )
+      )
+    md_file <- gsub("\\.R$", ".md", r_file)
+    if (file.exists(md_file))
+      rendout <- md_file
+    else
+      rendout <- FALSE
+  } else {
+    rendout <-
+      suppressMessages(try(do.call(rmarkdown::render, rendargs),
+                           silent = TRUE))
+  }
 
-  if(inherits(rendout, "try-error")) {
+  if (inherits(rendout, "try-error") || identical(rendout, FALSE)) {
     stop("\nCannot render this code. Maybe the clipboard contents",
          " are not what you think?\n",
          rendout)

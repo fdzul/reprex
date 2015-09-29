@@ -5,26 +5,35 @@
 \title{Render a reprex}
 \usage{
 reprex(x, infile = NULL, venue = c("gh", "so"), outfile = NULL,
-  show = TRUE, si = FALSE, upload.fun = knitr::imgur_upload)
+  show = TRUE, si = FALSE, sandbox = NULL,
+  upload.fun = knitr::imgur_upload)
 }
 \arguments{
-\item{x}{A code expression. If not given, retrieves code from the clipboard.}
+\item{x}{An expression. If not given, \code{repex} will look for code in
+\code{infile}, if provided, or on the clipboard.}
 
-\item{infile}{Path to \code{.R} file containing reprex code}
+\item{infile}{Path to \code{.R} file containing reprex code.}
 
-\item{venue}{"gh" for GitHub or "so" for stackoverflow}
+\item{venue}{"gh" for GitHub or "so" for stackoverflow.}
 
 \item{outfile}{Desired stub for output \code{.R}, \code{.md}, and
 \code{.html} files for reproducible example. If \code{NULL}, keeps them in
 temporary files. At this point, outfiles are deposited in current working
-directory, but the goal is to consult options for a place where you keep
-all such snippets.}
+directory, but the goal is to consult options for a place to store all
+reprexes.}
 
-\item{show}{Whether to show the output in a viewer (RStudio or browser)}
+\item{show}{Whether to show rendered output in a viewer (RStudio or browser).}
 
 \item{si}{Whether to include the results of
 \code{\link[devtools]{session_info}}, if available, or
 \code{\link{sessionInfo}} at the end of the reprex.}
+
+\item{sandbox}{Requests that the reprex be run in a clean R session, which
+will verify that it is, indeed, a reprex. Defaults to \code{TRUE} whenever
+\code{devtools} is installed. When \code{FALSE}, \code{reprex} attempts to
+execute in a clean environment, but there are various ways for previous
+actions in the user's current session to affect reprex execution, such as
+the availability of loaded packages.}
 
 \item{upload.fun}{Function that is valid for the \code{upload.fun}
   \href{http://yihui.name/knitr/options/}{\code{knitr} option}, for uploading
